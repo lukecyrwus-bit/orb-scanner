@@ -26,6 +26,9 @@ def calculate_score(data):
     score = 0
     reasons = []
 
+    symbol = data.get("symbol")
+    direction = data.get("direction")
+
     if data.get("range_quality") == "tight":
         score += 25
         reasons.append("Tight opening range")
@@ -51,6 +54,32 @@ def calculate_score(data):
 
     except:
         pass
+
+    # ===== ADAPTIVE SYMBOL EDGE =====
+
+    key = f"{symbol}_{direction}"
+
+    symbol_trades = [
+        t for t in closed_trades
+        if f"{t['symbol']}_{t['direction']}" == key
+    ]
+
+    if len(symbol_trades) >= 5:
+
+        wins = len([
+            t for t in symbol_trades
+            if t["result"] == "TP2"
+        ])
+
+        wr = (wins / len(symbol_trades)) * 100
+
+        if wr >= 60:
+            score += 10
+            reasons.append(f"Historical edge {round(wr,1)}%")
+
+        elif wr <= 40:
+            score -= 10
+            reasons.append(f"Weak history {round(wr,1)}%")
 
     return score, reasons
 
