@@ -1,4 +1,4 @@
-import os
+nano server.pimport os
 import requests
 from fastapi import FastAPI, Request, HTTPException
 from dotenv import load_dotenv
@@ -15,6 +15,8 @@ MIN_SETUPS = 5
 MIN_SCORE_IMPROVEMENT = 5
 
 open_trades = {}
+closed_trades = []
+
 last_top_symbols = []
 last_top_score = 0
 
@@ -137,16 +139,19 @@ async def tv_webhook(request: Request):
     score, reasons = calculate_score(data)
 
     open_trades[symbol] = {
-        "symbol": symbol,
-        "direction": direction,
-        "entry": data.get("entry"),
-        "sl": data.get("sl"),
-        "tp1": data.get("tp1"),
-        "tp2": data.get("tp2"),
-        "score": score,
-        "reasons": reasons,
-        "status": "OPEN",
-        "created_at": datetime.now().isoformat()
+    "symbol": symbol,
+    "direction": direction,
+    "entry": float(data.get("entry")),
+    "sl": float(data.get("sl")),
+    "tp1": float(data.get("tp1")),
+    "tp2": float(data.get("tp2")),
+    "score": score,
+    "reasons": reasons,
+    "status": "OPEN",
+    "tp1_hit": False,
+    "tp2_hit": False,
+    "sl_hit": False,
+    "created_at": datetime.now().isoformat()}
     }
 
     process_ranking()
