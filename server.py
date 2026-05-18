@@ -309,6 +309,34 @@ async def status():
     }
 
 
+@app.get("/stats")
+async def stats():
+
+    total = len(closed_trades)
+
+    tp2_wins = len([
+        t for t in closed_trades
+        if t["result"] == "TP2"
+    ])
+
+    sl_losses = len([
+        t for t in closed_trades
+        if t["result"] == "SL"
+    ])
+
+    winrate = 0
+
+    if total > 0:
+        winrate = round((tp2_wins / total) * 100, 2)
+
+    return {
+        "total_trades": total,
+        "tp2_wins": tp2_wins,
+        "sl_losses": sl_losses,
+        "winrate": winrate
+    }
+
+
 @app.get("/send-report")
 async def send_report():
 
