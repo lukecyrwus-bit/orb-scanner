@@ -1,4 +1,4 @@
-nano server.pimport os
+import os
 import requests
 from fastapi import FastAPI, Request, HTTPException
 from dotenv import load_dotenv
@@ -43,9 +43,11 @@ def calculate_score(data):
 
     try:
         rr = float(data.get("rr", 0))
+
         if rr >= 2:
             score += 10
             reasons.append(f"RR {rr}")
+
     except:
         pass
 
@@ -53,9 +55,11 @@ def calculate_score(data):
 
 
 def send_discord_report(top_setups, reason="TOP 2 ORB SETUPS"):
+
     message = f"🔥 **{reason} — NY OPEN**\n\n"
 
     for i, setup in enumerate(top_setups, start=1):
+
         message += f"""
 {i}. **{setup['symbol']}**
 Direction: **{setup['direction']}**
@@ -74,34 +78,46 @@ Reasons:
 
         message += "\n\n"
 
-    requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
+    requests.post(
+        DISCORD_WEBHOOK_URL,
+        json={"content": message}
+    )
 
 
 def should_send_new_report(top_2):
-    global last_top_symbols, last_top_score
+
+    global last_top_symbols
+    global last_top_score
 
     current_symbols = [x["symbol"] for x in top_2]
     current_score = sum(x["score"] for x in top_2)
 
     if not last_top_symbols:
+
         last_top_symbols = current_symbols
         last_top_score = current_score
+
         return True, "INITIAL TOP 2 ORB SETUPS"
 
     if current_symbols != last_top_symbols and current_score >= last_top_score:
+
         last_top_symbols = current_symbols
         last_top_score = current_score
+
         return True, "UPDATED TOP 2 — BETTER SETUPS FOUND"
 
     if current_score >= last_top_score + MIN_SCORE_IMPROVEMENT:
+
         last_top_symbols = current_symbols
         last_top_score = current_score
+
         return True, "UPDATED TOP 2 — SCORE IMPROVED"
 
     return False, ""
 
 
 def process_ranking():
+
     if len(open_trades) < MIN_SETUPS:
         return
 
@@ -112,6 +128,7 @@ def process_ranking():
     )
 
     top_2 = sorted_setups[:2]
+
     send_update, reason = should_send_new_report(top_2)
 
     if send_update:
@@ -125,6 +142,7 @@ async def home():
 
 @app.post("/tv-webhook")
 async def tv_webhook(request: Request):
+
     data = await request.json()
 
     if data.get("token") != SECRET_TOKEN:
@@ -134,25 +152,106 @@ async def tv_webhook(request: Request):
     direction = data.get("direction")
 
     if not symbol or direction not in ["LONG", "SHORT"]:
-        return {"status": "ignored", "reason": "missing symbol or direction"}
+        return {
+            "status": "ignored",
+            "reason": "missing symbol or direction"
+        }
 
     score, reasons = calculate_score(data)
 
     open_trades[symbol] = {
-    "symbol": symbol,
-    "direction": direction,
-    "entry": float(data.get("entry")),
-    "sl": float(data.get("sl")),
-    "tp1": float(data.get("tp1")),
-    "tp2": float(data.get("tp2")),
-    "score": score,
-    "reasons": reasons,
-    "status": "OPEN",
-    "tp1_hit": False,
-    "tp2_hit": False,
-    "sl_hit": False,
-    "created_at": datetime.now().isoformat()}
+        "symbol": symbol,
+        "direction": direction,
+        "entry": float(data.get("entry")),
+        "sl": float(data.get("sl")),
+        "tp1": float(data.get("tp1")),
+        "tp2": float(data.get("tp2")),
+        "score": score,
+        "reasons": reasons,
+        "status": "OPEN",
+        "tp1_hit": False,
+        "tp2_hit": False,
+        "sl_hit": False,
+        "created_at": datetime.now().isoformat()
     }
+
+    trade = open_trades[symbol]
+
+    price = float(data.get("price"))
+
+    if trade["direction"] == "LONG":
+
+        if not trade["tp1_hit"] and price >= trade["tp1"]:
+
+            trade["tp1_hit"] = True
+
+            requests.post(
+                DISCORD_WEBHOOK_URL,
+                json={
+                    "content": f"✅ {symbol} LONG — TP1 HIT"
+                }
+            )
+
+        if not trade["tp2_hit"] and price >= trade["tp2"]:
+
+            trade["tp2_hit"] = True
+            trade["status"] = "CLOSED"
+
+            requests.post(
+                DISCORD_WEBHOOK_URL,
+                json={
+                    "content": f"🏆 {symbol} LONG — TP2 HIT"
+                }
+            )
+
+        if not trade["sl_hit"] and price <= trade["sl"]:
+
+            trade["sl_hit"] = True
+            trade["status"] = "CLOSED"
+
+            requests.post(
+                DISCORD_WEBHOOK_URL,
+                json={
+                    "content": f"❌ {symbol} LONG — SL HIT"
+                }
+            )
+
+    if trade["direction"] == "SHORT":
+
+        if not trade["tp1_hit"] and price <= trade["tp1"]:
+
+            trade["tp1_hit"] = True
+
+            requests.post(
+                DISCORD_WEBHOOK_URL,
+                json={
+                    "content": f"✅ {symbol} SHORT — TP1 HIT"
+                }
+            )
+
+        if not trade["tp2_hit"] and price <= trade["tp2"]:
+
+            trade["tp2_hit"] = True
+            trade["status"] = "CLOSED"
+
+            requests.post(
+                DISCORD_WEBHOOK_URL,
+                json={
+                    "content": f"🏆 {symbol} SHORT — TP2 HIT"
+                }
+            )
+
+        if not trade["sl_hit"] and price >= trade["sl"]:
+
+            trade["sl_hit"] = True
+            trade["status"] = "CLOSED"
+
+            requests.post(
+                DISCORD_WEBHOOK_URL,
+                json={
+                    "content": f"❌ {symbol} SHORT — SL HIT"
+                }
+            )
 
     process_ranking()
 
@@ -166,6 +265,7 @@ async def tv_webhook(request: Request):
 
 @app.get("/status")
 async def status():
+
     return {
         "open_trades": len(open_trades),
         "symbols": list(open_trades.keys()),
@@ -176,6 +276,7 @@ async def status():
 
 @app.get("/send-report")
 async def send_report():
+
     if not open_trades:
         return {"status": "no data"}
 
@@ -186,7 +287,11 @@ async def send_report():
     )
 
     top_2 = sorted_setups[:2]
-    send_discord_report(top_2, "MANUAL TOP 2 ORB REPORT")
+
+    send_discord_report(
+        top_2,
+        "MANUAL TOP 2 ORB REPORT"
+    )
 
     return {
         "status": "report sent",
@@ -196,10 +301,15 @@ async def send_report():
 
 @app.get("/reset")
 async def reset():
-    global open_trades, last_top_symbols, last_top_score
+
+    global open_trades
+    global last_top_symbols
+    global last_top_score
 
     open_trades = {}
     last_top_symbols = []
     last_top_score = 0
 
-    return {"status": "reset done"}
+    return {
+        "status": "reset done"
+    }
