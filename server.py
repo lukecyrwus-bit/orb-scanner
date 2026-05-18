@@ -11,37 +11,32 @@ app = FastAPI()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 SECRET_TOKEN = os.getenv("SECRET_TOKEN")
 
-EXPECTED_SYMBOLS = 5
-market_data = {}
-last_report_date = None
+MIN_SETUPS = 5
+MIN_SCORE_IMPROVEMENT = 5
+
+open_trades = {}
+last_top_symbols = []
+last_top_score = 0
 
 
 def calculate_score(data):
     score = 0
     reasons = []
 
-    if data.get("htf_bias") == "bullish":
-        score += 20
-        reasons.append("HTF bullish")
-
-    if data.get("htf_bias") == "bearish":
-        score += 20
-        reasons.append("HTF bearish")
-
     if data.get("range_quality") == "tight":
-        score += 20
+        score += 25
         reasons.append("Tight opening range")
 
     if data.get("volume_expansion") == "true":
-        score += 20
+        score += 25
         reasons.append("Volume expansion")
 
     if data.get("sweep") == "true":
-        score += 15
+        score += 20
         reasons.append("Liquidity sweep")
 
     if data.get("momentum") == "strong":
-        score += 15
+        score += 20
         reasons.append("Strong momentum")
 
     try:
@@ -55,14 +50,19 @@ def calculate_score(data):
     return score, reasons
 
 
-def send_discord_report(top_setups):
-    message = "🔥 **TOP 2 ORB SETUPS — NY OPEN**\n\n"
+def send_discord_report(top_setups, reason="TOP 2 ORB SETUPS"):
+    message = f"🔥 **{reason} — NY OPEN**\n\n"
 
     for i, setup in enumerate(top_setups, start=1):
         message += f"""
 {i}. **{setup['symbol']}**
-Direction: {setup['direction']}
-Score: {setup['score']}/100
+Direction: **{setup['direction']}**
+Score: **{setup['score']}/100**
+
+Entry: `{setup['entry']}`
+SL: `{setup['sl']}`
+TP1: `{setup['tp1']}`
+TP2: `{setup['tp2']}`
 
 Reasons:
 """
@@ -75,27 +75,45 @@ Reasons:
     requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
 
 
-def maybe_send_auto_report():
-    global last_report_date
+def should_send_new_report(top_2):
+    global last_top_symbols, last_top_score
 
-    today = datetime.now().date()
+    current_symbols = [x["symbol"] for x in top_2]
+    current_score = sum(x["score"] for x in top_2)
 
-    if last_report_date == today:
-        return
+    if not last_top_symbols:
+        last_top_symbols = current_symbols
+        last_top_score = current_score
+        return True, "INITIAL TOP 2 ORB SETUPS"
 
-    if len(market_data) < EXPECTED_SYMBOLS:
+    if current_symbols != last_top_symbols and current_score >= last_top_score:
+        last_top_symbols = current_symbols
+        last_top_score = current_score
+        return True, "UPDATED TOP 2 — BETTER SETUPS FOUND"
+
+    if current_score >= last_top_score + MIN_SCORE_IMPROVEMENT:
+        last_top_symbols = current_symbols
+        last_top_score = current_score
+        return True, "UPDATED TOP 2 — SCORE IMPROVED"
+
+    return False, ""
+
+
+def process_ranking():
+    if len(open_trades) < MIN_SETUPS:
         return
 
     sorted_setups = sorted(
-        market_data.values(),
+        open_trades.values(),
         key=lambda x: x["score"],
         reverse=True
     )
 
     top_2 = sorted_setups[:2]
-    send_discord_report(top_2)
+    send_update, reason = should_send_new_report(top_2)
 
-    last_report_date = today
+    if send_update:
+        send_discord_report(top_2, reason)
 
 
 @app.get("/")
@@ -111,39 +129,59 @@ async def tv_webhook(request: Request):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     symbol = data.get("symbol")
+    direction = data.get("direction")
+
+    if not symbol or direction not in ["LONG", "SHORT"]:
+        return {"status": "ignored", "reason": "missing symbol or direction"}
+
     score, reasons = calculate_score(data)
 
-    market_data[symbol] = {
+    open_trades[symbol] = {
         "symbol": symbol,
-        "direction": data.get("direction"),
+        "direction": direction,
+        "entry": data.get("entry"),
+        "sl": data.get("sl"),
+        "tp1": data.get("tp1"),
+        "tp2": data.get("tp2"),
         "score": score,
         "reasons": reasons,
-        "timestamp": datetime.now().isoformat()
+        "status": "OPEN",
+        "created_at": datetime.now().isoformat()
     }
 
-    maybe_send_auto_report()
+    process_ranking()
 
     return {
         "status": "stored",
         "symbol": symbol,
         "score": score,
-        "stored_symbols": len(market_data)
+        "open_trades": len(open_trades)
+    }
+
+
+@app.get("/status")
+async def status():
+    return {
+        "open_trades": len(open_trades),
+        "symbols": list(open_trades.keys()),
+        "last_top_symbols": last_top_symbols,
+        "last_top_score": last_top_score
     }
 
 
 @app.get("/send-report")
 async def send_report():
-    if not market_data:
+    if not open_trades:
         return {"status": "no data"}
 
     sorted_setups = sorted(
-        market_data.values(),
+        open_trades.values(),
         key=lambda x: x["score"],
         reverse=True
     )
 
     top_2 = sorted_setups[:2]
-    send_discord_report(top_2)
+    send_discord_report(top_2, "MANUAL TOP 2 ORB REPORT")
 
     return {
         "status": "report sent",
@@ -151,9 +189,12 @@ async def send_report():
     }
 
 
-@app.get("/status")
-async def status():
-    return {
-        "stored_symbols": len(market_data),
-        "symbols": list(market_data.keys())
-    }
+@app.get("/reset")
+async def reset():
+    global open_trades, last_top_symbols, last_top_score
+
+    open_trades = {}
+    last_top_symbols = []
+    last_top_score = 0
+
+    return {"status": "reset done"}
