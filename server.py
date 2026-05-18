@@ -22,6 +22,7 @@ last_top_score = 0
 
 
 def calculate_score(data):
+
     score = 0
     reasons = []
 
@@ -137,7 +138,10 @@ def process_ranking():
 
 @app.get("/")
 async def home():
-    return {"status": "ORB scanner online"}
+
+    return {
+        "status": "ORB scanner online"
+    }
 
 
 @app.post("/tv-webhook")
@@ -152,6 +156,7 @@ async def tv_webhook(request: Request):
     direction = data.get("direction")
 
     if not symbol or direction not in ["LONG", "SHORT"]:
+
         return {
             "status": "ignored",
             "reason": "missing symbol or direction"
@@ -197,6 +202,13 @@ async def tv_webhook(request: Request):
             trade["tp2_hit"] = True
             trade["status"] = "CLOSED"
 
+            closed_trades.append({
+                "symbol": symbol,
+                "direction": trade["direction"],
+                "result": "TP2",
+                "score": trade["score"]
+            })
+
             requests.post(
                 DISCORD_WEBHOOK_URL,
                 json={
@@ -208,6 +220,13 @@ async def tv_webhook(request: Request):
 
             trade["sl_hit"] = True
             trade["status"] = "CLOSED"
+
+            closed_trades.append({
+                "symbol": symbol,
+                "direction": trade["direction"],
+                "result": "SL",
+                "score": trade["score"]
+            })
 
             requests.post(
                 DISCORD_WEBHOOK_URL,
@@ -234,6 +253,13 @@ async def tv_webhook(request: Request):
             trade["tp2_hit"] = True
             trade["status"] = "CLOSED"
 
+            closed_trades.append({
+                "symbol": symbol,
+                "direction": trade["direction"],
+                "result": "TP2",
+                "score": trade["score"]
+            })
+
             requests.post(
                 DISCORD_WEBHOOK_URL,
                 json={
@@ -245,6 +271,13 @@ async def tv_webhook(request: Request):
 
             trade["sl_hit"] = True
             trade["status"] = "CLOSED"
+
+            closed_trades.append({
+                "symbol": symbol,
+                "direction": trade["direction"],
+                "result": "SL",
+                "score": trade["score"]
+            })
 
             requests.post(
                 DISCORD_WEBHOOK_URL,
@@ -259,7 +292,8 @@ async def tv_webhook(request: Request):
         "status": "stored",
         "symbol": symbol,
         "score": score,
-        "open_trades": len(open_trades)
+        "open_trades": len(open_trades),
+        "closed_trades": len(closed_trades)
     }
 
 
@@ -268,6 +302,7 @@ async def status():
 
     return {
         "open_trades": len(open_trades),
+        "closed_trades": len(closed_trades),
         "symbols": list(open_trades.keys()),
         "last_top_symbols": last_top_symbols,
         "last_top_score": last_top_score
@@ -303,10 +338,13 @@ async def send_report():
 async def reset():
 
     global open_trades
+    global closed_trades
     global last_top_symbols
     global last_top_score
 
     open_trades = {}
+    closed_trades = []
+
     last_top_symbols = []
     last_top_score = 0
 
