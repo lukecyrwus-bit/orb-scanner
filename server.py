@@ -209,6 +209,9 @@ async def tv_webhook(request: Request):
                 "score": trade["score"]
             })
 
+            if len(closed_trades) > 50:
+                closed_trades.pop(0)
+
             requests.post(
                 DISCORD_WEBHOOK_URL,
                 json={
@@ -227,6 +230,9 @@ async def tv_webhook(request: Request):
                 "result": "SL",
                 "score": trade["score"]
             })
+
+            if len(closed_trades) > 50:
+                closed_trades.pop(0)
 
             requests.post(
                 DISCORD_WEBHOOK_URL,
@@ -260,6 +266,9 @@ async def tv_webhook(request: Request):
                 "score": trade["score"]
             })
 
+            if len(closed_trades) > 50:
+                closed_trades.pop(0)
+
             requests.post(
                 DISCORD_WEBHOOK_URL,
                 json={
@@ -278,6 +287,9 @@ async def tv_webhook(request: Request):
                 "result": "SL",
                 "score": trade["score"]
             })
+
+            if len(closed_trades) > 50:
+                closed_trades.pop(0)
 
             requests.post(
                 DISCORD_WEBHOOK_URL,
