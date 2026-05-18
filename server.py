@@ -11,7 +11,7 @@ app = FastAPI()
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 SECRET_TOKEN = os.getenv("SECRET_TOKEN")
 
-EXPECTED_SYMBOLS = 10
+EXPECTED_SYMBOLS = 5
 market_data = {}
 last_report_date = None
 
