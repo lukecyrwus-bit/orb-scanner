@@ -336,16 +336,52 @@ async def stats():
         if t["result"] == "SL"
     ])
 
-    winrate = 0
+    overall_winrate = 0
 
     if total > 0:
-        winrate = round((tp2_wins / total) * 100, 2)
+        overall_winrate = round((tp2_wins / total) * 100, 2)
+
+    symbol_stats = {}
+
+    for trade in closed_trades:
+
+        key = f"{trade['symbol']}_{trade['direction']}"
+
+        if key not in symbol_stats:
+
+            symbol_stats[key] = {
+                "total": 0,
+                "wins": 0,
+                "losses": 0,
+                "winrate": 0
+            }
+
+        symbol_stats[key]["total"] += 1
+
+        if trade["result"] == "TP2":
+            symbol_stats[key]["wins"] += 1
+
+        if trade["result"] == "SL":
+            symbol_stats[key]["losses"] += 1
+
+    for key in symbol_stats:
+
+        s = symbol_stats[key]
+
+        if s["total"] > 0:
+            s["winrate"] = round(
+                (s["wins"] / s["total"]) * 100,
+                2
+            )
 
     return {
-        "total_trades": total,
-        "tp2_wins": tp2_wins,
-        "sl_losses": sl_losses,
-        "winrate": winrate
+        "overall": {
+            "total_trades": total,
+            "tp2_wins": tp2_wins,
+            "sl_losses": sl_losses,
+            "winrate": overall_winrate
+        },
+        "symbols": symbol_stats
     }
 
 
